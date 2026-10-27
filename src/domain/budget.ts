@@ -1,45 +1,47 @@
-import type { Currency, Expense, PlanDay, Rates, Trip } from './types'
+import type { Currency, Expense, PlanDay, Trip } from './types'
 
-/** Converts an amount in any supported currency to EUR, rounded to cents. */
-export function toEur(amount: number, currency: Currency, rates: Rates): number {
-  let eur: number
-  switch (currency) {
-    case 'EUR':
-      eur = amount
-      break
-    case 'CHF':
-      eur = amount * rates.eurPerChf
-      break
-    case 'COP':
-      eur = amount / rates.copPerEur
-      break
-  }
-  return Math.round(eur * 100) / 100
+export const round2 = (n: number) => Math.round(n * 100) / 100
+
+export function findCurrency(currencies: Currency[], code: string): Currency {
+  const currency = currencies.find((c) => c.code === code)
+  if (!currency) throw new Error(`Unknown currency: ${code}`)
+  return currency
+}
+
+/** Converts an amount in any configured currency to the base currency, rounded to cents. */
+export function toBase(amount: number, code: string, currencies: Currency[]): number {
+  return round2(amount / findCurrency(currencies, code).unitsPerBase)
+}
+
+/** Converts an amount in the base currency to another configured currency. */
+export function fromBase(amountBase: number, code: string, currencies: Currency[]): number {
+  return amountBase * findCurrency(currencies, code).unitsPerBase
+}
+
+/** Days ordered by date. Editing can leave them out of order, so every view uses this. */
+export function sortDays(days: PlanDay[]): PlanDay[] {
+  return [...days].sort((a, b) => a.date.localeCompare(b.date))
 }
 
 /**
- * Clamps a date to the trip range: before the trip shows the first day,
- * after the trip shows the last day.
+ * Picks the trip day that represents "today": before the trip it is the first day,
+ * after the trip the last one, and in a gap between dates the closest previous day.
  */
-export function clampToTrip(date: string, days: PlanDay[]): string {
-  const first = days[0].date
-  const last = days[days.length - 1].date
-  if (date < first) return first
-  if (date > last) return last
-  return date
-}
-
-/** Groups day-to-day expenses by date. Emergency expenses are kept apart. */
-export function groupByDay(expenses: Expense[]): Record<string, Expense[]> {
-  const groups: Record<string, Expense[]> = {}
-  for (const expense of expenses) {
-    if (expense.category === 'Emergency') continue
-    ;(groups[expense.date] ??= []).push(expense)
+export function currentDay(days: PlanDay[], todayIso: string): PlanDay {
+  const sorted = sortDays(days)
+  let current = sorted[0]
+  for (const day of sorted) {
+    if (day.date <= todayIso) current = day
   }
-  return groups
+  return current
 }
 
-const sum = (expenses: Expense[] = []) => expenses.reduce((total, e) => total + e.amountEur, 0)
+/** Index where a new country section starts (the country changes from the previous day). */
+export function startsSection(days: PlanDay[], index: number): boolean {
+  return index === 0 || days[index].country !== days[index - 1].country
+}
+
+const sum = (expenses: Expense[] = []) => expenses.reduce((total, e) => total + e.amountBase, 0)
 
 export interface DaySummary extends PlanDay {
   spent: number
@@ -65,17 +67,22 @@ export interface TripSummary {
  * come out of a separate cushion instead of the daily budget.
  */
 export function summarizeTrip(trip: Trip, expenses: Expense[], todayIso: string): TripSummary {
-  const byDay = groupByDay(expenses)
-  const today = clampToTrip(todayIso, trip.days)
+  const byDay: Record<string, Expense[]> = {}
+  for (const expense of expenses) {
+    if (expense.category === 'Emergency') continue
+    ;(byDay[expense.dayId] ??= []).push(expense)
+  }
 
-  const days: DaySummary[] = trip.days.map((day) => {
-    const dayExpenses = [...(byDay[day.date] ?? [])].sort((a, b) => a.createdAt - b.createdAt)
+  const days: DaySummary[] = sortDays(trip.days).map((day) => {
+    const dayExpenses = [...(byDay[day.id] ?? [])].sort((a, b) => a.createdAt - b.createdAt)
     return { ...day, spent: sum(dayExpenses), expenses: dayExpenses }
   })
 
-  const before = days.filter((d) => d.date < today)
-  const upToToday = days.filter((d) => d.date <= today)
-  const todaySummary = days.find((d) => d.date === today)!
+  const todayId = currentDay(trip.days, todayIso).id
+  const todayIndex = days.findIndex((d) => d.id === todayId)
+  const today = days[todayIndex]
+  const before = days.slice(0, todayIndex)
+  const upToToday = days.slice(0, todayIndex + 1)
 
   const carryOver = before.reduce((acc, d) => acc + d.budget - d.spent, 0)
   const totalBudget = days.reduce((acc, d) => acc + d.budget, 0)
@@ -83,9 +90,9 @@ export function summarizeTrip(trip: Trip, expenses: Expense[], todayIso: string)
   const emergencySpent = sum(expenses.filter((e) => e.category === 'Emergency'))
 
   return {
-    today: todaySummary,
+    today,
     carryOver,
-    availableToday: todaySummary.budget + carryOver - todaySummary.spent,
+    availableToday: today.budget + carryOver - today.spent,
     tripRemaining: totalBudget - totalSpent,
     pace: upToToday.reduce((acc, d) => acc + d.budget - d.spent, 0),
     cushionRemaining: trip.emergencyCushion - emergencySpent,

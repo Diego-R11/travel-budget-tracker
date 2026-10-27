@@ -1,61 +1,111 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { ChevronDown, Hand, X } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Card } from '@/components/ui/card'
+import { BudgetBar } from './BudgetBar'
+import { SwipeableRow } from './SwipeableRow'
 import type { DaySummary } from '../domain/budget'
-import { formatDay, formatEur } from '../domain/format'
-import { ProgressBar } from './ProgressBar'
+import { formatDay, formatMoney } from '../domain/format'
+import type { Expense } from '../domain/types'
+import { cn } from '@/lib/utils'
 
 interface Props {
   day: DaySummary
+  baseCurrency: string
   isToday: boolean
-  onRemove: (id: string) => void
+  openRowId: string | null
+  onOpenRowChange: (id: string | null) => void
+  onEdit: (expense: Expense) => void
+  onDelete: (expense: Expense) => void
+  /** Show the "swipe left to edit" hint on this card's first expense. */
+  showHint: boolean
+  onDismissHint: () => void
 }
 
-export function DayCard({ day, isToday, onRemove }: Props) {
+export function DayCard({ day, baseCurrency, isToday, openRowId, onOpenRowChange, onEdit, onDelete, showHint, onDismissHint }: Props) {
+  const [expanded, setExpanded] = useState(isToday)
+  const money = (n: number) => formatMoney(n, baseCurrency)
+
   return (
-    <details className={`day ${isToday ? 'day--today' : ''}`} open={isToday}>
-      <summary>
-        <span className="date">{formatDay(day.date)}</span>
-        <span className="place">{day.place}</span>
-        <span className="amt num">
-          {formatEur(day.spent)} / {formatEur(day.budget)}
-        </span>
-        <ProgressBar spent={day.spent} budget={day.budget} label={`Spending on ${day.place}`} />
-      </summary>
-      <div className="items">
-        {day.expenses.length === 0 && <div className="muted">No expenses yet.</div>}
-        {day.expenses.map((e) => (
-          <div className="item" key={e.id}>
-            <span className="what">
-              <span className="tag">{e.category}</span> {e.note}
-            </span>
-            <span className="num">
-              {formatEur(e.amountEur)}
-              {e.currency !== 'EUR' && ` (${e.amount} ${e.currency})`}
-            </span>
-            <RemoveButton onConfirm={() => onRemove(e.id)} />
+    <Card className={cn('gap-0 py-0', isToday && 'ring-primary/40 ring-2')}>
+      <button
+        type="button"
+        className="w-full space-y-2 px-4 py-3 text-left"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <div className="flex items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-medium">{day.place}</p>
+            <p className="text-muted-foreground flex items-center gap-2 text-xs tabular-nums">
+              {formatDay(day.date)}
+              {isToday && (
+                <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
+                  Today
+                </Badge>
+              )}
+            </p>
           </div>
-        ))}
-      </div>
-    </details>
+          <span className="shrink-0 text-sm tabular-nums">
+            {money(day.spent)} <span className="text-muted-foreground">/ {money(day.budget)}</span>
+          </span>
+          <ChevronDown className={cn('text-muted-foreground size-4 shrink-0 transition-transform', expanded && 'rotate-180')} />
+        </div>
+        <BudgetBar spent={day.spent} budget={day.budget} label={`Spending on ${day.place}`} />
+      </button>
+
+      {expanded && (
+        <div className="space-y-1 border-t px-2 py-2">
+          {day.expenses.length === 0 && <p className="text-muted-foreground px-2 py-1 text-sm">No expenses yet.</p>}
+          {day.expenses.map((e, i) => (
+            <div key={e.id} className="relative">
+              {showHint && i === 0 && <SwipeHint onDismiss={onDismissHint} />}
+              <SwipeableRow
+                label={e.note || e.category}
+                open={openRowId === e.id}
+                onOpenChange={(open) => {
+                  onOpenRowChange(open ? e.id : null)
+                  if (open) onDismissHint()
+                }}
+                onEdit={() => onEdit(e)}
+                onDelete={() => onDelete(e)}
+              >
+                <div className={cn('flex items-center gap-3 px-2 py-2', showHint && i === 0 && 'animate-hint-nudge')}>
+                  <Badge variant="outline" className={cn(e.category === 'Emergency' && 'text-destructive')}>
+                    {e.category}
+                  </Badge>
+                  <span className="min-w-0 flex-1 truncate text-sm">{e.note}</span>
+                  <span className="text-right text-sm tabular-nums">
+                    {money(e.amountBase)}
+                    {e.currency !== baseCurrency && (
+                      <span className="text-muted-foreground block text-xs">
+                        {e.amount} {e.currency}
+                      </span>
+                    )}
+                  </span>
+                </div>
+              </SwipeableRow>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
   )
 }
 
-/** Two-step delete: first tap arms the button, second tap within 3 s confirms. */
-function RemoveButton({ onConfirm }: { onConfirm: () => void }) {
-  const [armed, setArmed] = useState(false)
-
-  useEffect(() => {
-    if (!armed) return
-    const timer = setTimeout(() => setArmed(false), 3000)
-    return () => clearTimeout(timer)
-  }, [armed])
-
+/** Tooltip-style bubble shown until the user swipes a row for the first time. */
+function SwipeHint({ onDismiss }: { onDismiss: () => void }) {
   return (
-    <button
-      type="button"
-      className={`del ${armed ? 'del--armed' : ''}`}
-      onClick={() => (armed ? onConfirm() : setArmed(true))}
+    <div
+      role="note"
+      className="bg-primary text-primary-foreground absolute -top-7 right-2 z-10 flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium shadow-md"
     >
-      {armed ? 'Delete?' : 'Remove'}
-    </button>
+      <Hand className="size-3.5" />
+      Swipe left to edit
+      <button type="button" aria-label="Dismiss hint" className="opacity-70 hover:opacity-100" onClick={onDismiss}>
+        <X className="size-3.5" />
+      </button>
+      <span className="bg-primary absolute -bottom-1 right-6 size-2 rotate-45" aria-hidden />
+    </div>
   )
 }

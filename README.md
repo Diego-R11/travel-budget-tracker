@@ -4,47 +4,57 @@
 
 A mobile-first React app to control daily spending during a multi-country trip. Each day has its own budget; whatever you don't spend rolls over to the next day, and overspending is taken from the days that follow. Unexpected costs go to a separate emergency cushion so they don't distort the daily plan.
 
-I built it to track my own trip through Spain, France, Switzerland and Italy, paying in EUR, CHF and COP.
+I built it to track my own trip through Spain, France, Switzerland and Italy, paying in EUR, CHF and COP. Everything about the trip is configurable, so it works for any trip.
 
 ## Features
 
 - **Daily budget with carry-over** – "available today" = today's budget + what you saved (or minus what you overspent) on previous days.
 - **Pace indicator** – how far above or below the plan you are up to today.
-- **Multi-currency** – expenses in EUR, CHF or COP, converted to EUR with editable exchange rates; totals also shown in COP.
+- **Configurable trip** – edit the name, emergency cushion and every day (date, city, country, budget); add or remove days, or apply the same budget to all of them. Days are grouped by country automatically.
+- **Any currency** – add currencies with their exchange rate, edit rates, choose the base currency (budgets) and a reference currency for totals (e.g. your home currency).
+- **Swipe to edit** – swipe an expense left to reveal *Edit* and *Delete*. A one-time hint shows the gesture; delete has *Undo*. Edits can change the amount, currency, category, note or day.
 - **Emergency cushion** – expenses tagged *Emergency* come out of a separate fund.
-- **Per-day breakdown** – collapsible day cards grouped by country, with progress bars (green / amber from 80% / red when over).
-- **Safe delete** – two-step confirmation to remove an expense.
-- **Persistence** – data stays in `localStorage`, with an in-memory fallback when storage is blocked.
+- **Light and dark mode** following the system setting.
+- **Persistence** in `localStorage`, with an in-memory fallback when storage is blocked and a migration from the first version's data format.
 
 ## Tech stack
 
-React 19 · TypeScript · Vite · Vitest · React Testing Library · user-event
+React 19 · TypeScript · Vite · Tailwind CSS v4 · shadcn/ui (Radix UI) · lucide-react · Vitest · React Testing Library
 
 ## Architecture
 
 ```
 src/
-├── domain/        # Pure business logic, no React
-│   ├── types.ts       # Expense, PlanDay, Trip, Rates
-│   ├── budget.ts      # toEur, summarizeTrip (carry-over, pace, cushion), barStatus
-│   └── format.ts      # Currency and date formatting
-├── data/trip.ts   # Trip plan (days, budgets, sections)
-├── hooks/
-│   ├── useExpenses.ts     # useReducer (add/remove) + persistence
-│   └── useLocalStorage.ts # useState synced to localStorage
-├── components/    # Presentational components
-│   ├── SummaryTiles.tsx, ExpenseForm.tsx, DayCard.tsx,
-│   └── RatesPanel.tsx, ProgressBar.tsx
-└── App.tsx        # Composes everything; derives the summary with useMemo
+├── domain/              # Pure business logic, no React
+│   ├── types.ts             # Trip, PlanDay, Currency, Expense
+│   ├── budget.ts            # Conversion, summarizeTrip (carry-over, pace, cushion), barStatus
+│   ├── tripSettings.ts      # Pure edits: days, currencies, change of base currency
+│   ├── expenses.ts          # Draft → stored expense
+│   ├── swipe.ts             # Where a swiped row settles
+│   └── format.ts            # Money and date formatting
+├── state/
+│   ├── appReducer.ts        # One reducer for trip + expenses
+│   ├── storage.ts           # Load/save, v1 → v2 migration
+│   └── useTripStore.ts      # useReducer + persistence
+├── components/
+│   ├── ui/                  # shadcn/ui components
+│   ├── settings/            # Settings sheet: trip, days, currencies
+│   ├── SummaryCards, ExpenseForm, DayCard, SwipeableRow, BudgetBar
+├── data/trip.ts         # Sample trip used on first launch
+└── App.tsx              # Composition, edit dialog, undo, swipe hint
 ```
 
 Key decisions:
 
-- **Business rules live in `domain/` as pure functions.** The carry-over and pace calculations are the riskiest logic, so they are isolated from the UI and unit-tested directly.
-- **The summary is derived, not stored.** Only the raw expense list is in state; totals are recalculated with `useMemo`, so there is a single source of truth and nothing can get out of sync.
-- **`useReducer` for expenses** makes the allowed state transitions explicit (`add`, `remove`) and easy to test.
-- **Amounts are converted when saved.** Each expense keeps its original amount and currency plus the EUR value at that moment, so changing a rate later doesn't rewrite history.
-- **"Today" is injectable** (`<App today="..." />`), which makes the app testable on any date.
+- **Business rules live in `domain/` as pure functions.** Carry-over, pace and re-basing currencies are the riskiest logic, so they're isolated from the UI and unit-tested directly. The reducer only delegates to them.
+- **One reducer for trip and expenses.** Some actions touch both: removing a day deletes its expenses, and changing the base currency re-expresses every budget and saved amount. Keeping them together makes those transitions atomic.
+- **The summary is derived, not stored.** Only raw data lives in state; totals are recalculated with `useMemo`, so there's a single source of truth.
+- **Expenses reference days by id, not by date.** Dates can be edited without losing the expenses attached to that day.
+- **Amounts are converted when saved.** Each expense keeps its original amount and currency plus the converted value, so changing a rate later doesn't rewrite history.
+- **Rates are "units per 1 base"** (1 EUR = 3650 COP) because that's how people read exchange rates; it avoids typing tiny decimals.
+- **Swipe built on Pointer Events** with `touch-action: pan-y`, so vertical scrolling keeps working. The actions are real buttons: keyboard users can tab to them, which opens the row.
+- **Native `<select>` styled like shadcn** instead of a custom dropdown: better on mobile and simpler to test.
+- **"Today" and the initial state are injectable** (`<App today="..." initialState={...} />`), which makes the app testable on any date.
 
 ## Getting started
 
@@ -55,7 +65,9 @@ npm test         # unit + component tests
 npm run build    # type-check and production build
 ```
 
-## Tests
+## Tests (39)
 
-- `src/domain/budget.test.ts` – currency conversion, date clamping, carry-over, overspending, emergency cushion, pace, progress-bar thresholds.
-- `src/App.test.tsx` – user flows: adding an expense, converting currencies, emergency expenses, validation, two-step delete and persistence.
+- `domain/budget.test.ts` – conversion, current day with gaps and unsorted days, country sections, carry-over, overspending, cushion, pace.
+- `domain/tripSettings.test.ts` – adding/removing days, duplicate dates, currency validation, rates, changing the base currency without changing the money.
+- `state/state.test.ts` – reducer transitions and v1 data migration.
+- `App.test.tsx` – user flows: add, convert, emergency, validation, swipe, swipe hint, edit, move to another day, delete + undo, editing budgets and countries, adding currencies.
