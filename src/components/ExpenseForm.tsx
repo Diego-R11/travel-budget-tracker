@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect } from '@/components/ui/native-select'
 import { sortDays } from '../domain/budget'
-import { formatDay } from '../domain/format'
+import { useI18n } from '../i18n'
 import { CATEGORIES, type Category, type Trip } from '../domain/types'
 import type { ExpenseDraft } from '../domain/expenses'
 import { cn } from '@/lib/utils'
@@ -20,12 +20,13 @@ interface Props {
 
 /** Shared by "add" and "edit": same fields, same validation. */
 export function ExpenseForm({ trip, initial, submitLabel, onSubmit, idPrefix = 'new' }: Props) {
+  const { t, day } = useI18n()
   const [amount, setAmount] = useState(initial.amount ? String(initial.amount) : '')
   const [currency, setCurrency] = useState(initial.currency ?? trip.baseCurrency)
   const [category, setCategory] = useState<Category>(initial.category ?? 'Food')
   const [note, setNote] = useState(initial.note ?? '')
   const [dayId, setDayId] = useState(initial.dayId)
-  const [error, setError] = useState('')
+  const [error, setError] = useState(false)
 
   // If the currency was removed in settings, fall back to the base currency.
   const currencyCode = trip.currencies.some((c) => c.code === currency) ? currency : trip.baseCurrency
@@ -34,10 +35,10 @@ export function ExpenseForm({ trip, initial, submitLabel, onSubmit, idPrefix = '
     event.preventDefault()
     const value = parseFloat(amount)
     if (!(value > 0)) {
-      setError('Enter an amount greater than zero.')
+      setError(true)
       return
     }
-    setError('')
+    setError(false)
     onSubmit({ amount: value, currency: currencyCode, category, note: note.trim(), dayId })
     setAmount('')
     setNote('')
@@ -49,22 +50,22 @@ export function ExpenseForm({ trip, initial, submitLabel, onSubmit, idPrefix = '
     <form className="space-y-4" onSubmit={handleSubmit} autoComplete="off" noValidate>
       <div className="grid grid-cols-[1fr_7rem] gap-2">
         <div className="space-y-1.5">
-          <Label htmlFor={id('amount')}>Amount</Label>
+          <Label htmlFor={id('amount')}>{t('expense.amount')}</Label>
           <Input
             id={id('amount')}
             type="number"
             inputMode="decimal"
             step="0.01"
             min="0"
-            placeholder="0.00"
+            placeholder="0"
             className="tabular-nums"
-            aria-invalid={!!error}
+            aria-invalid={error}
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
           />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor={id('currency')}>Currency</Label>
+          <Label htmlFor={id('currency')}>{t('expense.currency')}</Label>
           <NativeSelect id={id('currency')} value={currencyCode} onChange={(e) => setCurrency(e.target.value)}>
             {trip.currencies.map((c) => (
               <option key={c.code} value={c.code}>
@@ -76,8 +77,8 @@ export function ExpenseForm({ trip, initial, submitLabel, onSubmit, idPrefix = '
       </div>
 
       <div className="space-y-1.5">
-        <span className="text-sm font-medium">Category</span>
-        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Category">
+        <span className="text-sm font-medium">{t('expense.category')}</span>
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('expense.category')}>
           {CATEGORIES.map((c) => (
             <Button
               key={c}
@@ -88,7 +89,7 @@ export function ExpenseForm({ trip, initial, submitLabel, onSubmit, idPrefix = '
               className={cn('rounded-full', c === 'Emergency' && c !== category && 'text-destructive')}
               onClick={() => setCategory(c)}
             >
-              {c}
+              {t(`category.${c}`)}
             </Button>
           ))}
         </div>
@@ -96,15 +97,15 @@ export function ExpenseForm({ trip, initial, submitLabel, onSubmit, idPrefix = '
 
       <div className="grid gap-2 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <Label htmlFor={id('note')}>Note</Label>
-          <Input id={id('note')} placeholder="What was it? (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
+          <Label htmlFor={id('note')}>{t('expense.note')}</Label>
+          <Input id={id('note')} placeholder={t('expense.notePlaceholder')} value={note} onChange={(e) => setNote(e.target.value)} />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor={id('day')}>Day</Label>
+          <Label htmlFor={id('day')}>{t('expense.day')}</Label>
           <NativeSelect id={id('day')} value={dayId} onChange={(e) => setDayId(e.target.value)}>
             {sortDays(trip.days).map((d) => (
               <option key={d.id} value={d.id}>
-                {formatDay(d.date)} · {d.place}
+                {day(d.date)} · {d.place}
               </option>
             ))}
           </NativeSelect>
@@ -113,7 +114,7 @@ export function ExpenseForm({ trip, initial, submitLabel, onSubmit, idPrefix = '
 
       {error && (
         <p className="text-destructive text-sm" role="alert">
-          {error}
+          {t('expense.invalidAmount')}
         </p>
       )}
 

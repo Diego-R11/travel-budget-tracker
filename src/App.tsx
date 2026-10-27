@@ -1,18 +1,22 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Plus } from 'lucide-react'
+import { CircleHelp, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { useLiveRates } from './api/useLiveRates'
 import { DayCard } from './components/DayCard'
 import { ExpenseForm } from './components/ExpenseForm'
+import { LanguageSwitcher } from './components/LanguageSwitcher'
 import { SettingsSheet } from './components/settings/SettingsSheet'
 import { SummaryCards } from './components/SummaryCards'
 import { currentDay, startsSection, summarizeTrip } from './domain/budget'
 import { draftToExpense } from './domain/expenses'
-import { formatMoney, todayIso as getTodayIso } from './domain/format'
+import { todayIso as getTodayIso } from './domain/format'
 import type { Expense } from './domain/types'
+import { useI18n } from './i18n'
 import type { AppState } from './state/appReducer'
 import { useTripStore } from './state/useTripStore'
+import { useTour } from './tour/useTour'
 
 const HINT_KEY = 'travel-budget:swipe-hint-seen'
 
@@ -20,9 +24,12 @@ interface Props {
   /** Injectable state and "today" so the app can be tested on any date. */
   initialState?: AppState
   today?: string
+  /** Start the guided tour on the first visit (disabled in tests). */
+  autoStartTour?: boolean
 }
 
-export default function App({ initialState, today = getTodayIso() }: Props) {
+export default function App({ initialState, today = getTodayIso(), autoStartTour = true }: Props) {
+  const { t, money, language } = useI18n()
   const { trip, expenses, dispatch } = useTripStore(initialState)
   const [editing, setEditing] = useState<Expense | null>(null)
   const [openRowId, setOpenRowId] = useState<string | null>(null)
@@ -34,6 +41,17 @@ export default function App({ initialState, today = getTodayIso() }: Props) {
       return false
     }
   })
+  const tour = useTour({ autoStart: autoStartTour })
+
+  // Live exchange rates: fetched when the app opens (if enabled) and applied to the trip.
+  const liveRates = useLiveRates(trip.baseCurrency, trip.autoUpdateRates)
+  useEffect(() => {
+    if (liveRates.data) dispatch({ type: 'currency/applyLive', rates: liveRates.data })
+  }, [liveRates.data, dispatch])
+
+  useEffect(() => {
+    document.documentElement.lang = language
+  }, [language])
 
   const summary = useMemo(() => summarizeTrip(trip, expenses, today), [trip, expenses, today])
   const todayId = currentDay(trip.days, today).id
@@ -65,20 +83,26 @@ export default function App({ initialState, today = getTodayIso() }: Props) {
   return (
     <main className="mx-auto flex max-w-xl flex-col gap-5 px-4 pt-6 pb-24">
       <header className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{trip.name || 'My trip'}</h1>
-          <p className="text-muted-foreground text-sm">Daily budget with carry-over</p>
+        <div className="min-w-0">
+          <h1 className="truncate text-2xl font-semibold tracking-tight">{trip.name || t('app.defaultName')}</h1>
+          <p className="text-muted-foreground text-sm">{t('app.tagline')}</p>
         </div>
-        <SettingsSheet trip={trip} expenses={expenses} dispatch={dispatch} />
+        <div className="flex shrink-0 items-center gap-2">
+          <LanguageSwitcher />
+          <Button variant="outline" size="icon" aria-label={t('app.help')} data-tour="help" onClick={tour.start}>
+            <CircleHelp />
+          </Button>
+          <SettingsSheet trip={trip} expenses={expenses} dispatch={dispatch} />
+        </div>
       </header>
 
       <SummaryCards summary={summary} trip={trip} />
 
-      <Card>
+      <Card data-tour="add">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <Plus className="size-4" />
-            Add expense
+            {t('expense.add')}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -86,7 +110,7 @@ export default function App({ initialState, today = getTodayIso() }: Props) {
             key={todayId}
             trip={trip}
             initial={{ dayId: todayId }}
-            submitLabel="Save expense"
+            submitLabel={t('expense.save')}
             onSubmit={(draft) =>
               dispatch({
                 type: 'expense/add',
@@ -97,8 +121,8 @@ export default function App({ initialState, today = getTodayIso() }: Props) {
         </CardContent>
       </Card>
 
-      <section aria-label="Trip days" className="space-y-2">
-        <h2 className="text-muted-foreground text-xs font-medium tracking-wide uppercase">Budget per day</h2>
+      <section aria-label={t('days.label')} className="space-y-2">
+        <h2 className="text-muted-foreground text-xs font-medium tracking-wide uppercase">{t('days.title')}</h2>
         {summary.days.map((day, i) => (
           <div key={day.id} className="space-y-2">
             {startsSection(summary.days, i) && <h3 className="pt-3 text-sm font-semibold">{day.country}</h3>}
@@ -118,23 +142,21 @@ export default function App({ initialState, today = getTodayIso() }: Props) {
             />
           </div>
         ))}
-        <p className="text-muted-foreground pt-2 text-xs">
-          Whatever you don't spend one day rolls over to the next. Expenses tagged Emergency come out of the cushion.
-        </p>
+        <p className="text-muted-foreground pt-2 text-xs">{t('days.footnote')}</p>
       </section>
 
       <Dialog open={!!editing} onOpenChange={(open) => !open && setEditing(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit expense</DialogTitle>
-            <DialogDescription>It's converted again with the current exchange rate.</DialogDescription>
+            <DialogTitle>{t('expense.edit')}</DialogTitle>
+            <DialogDescription>{t('expense.editDescription')}</DialogDescription>
           </DialogHeader>
           {editing && (
             <ExpenseForm
               idPrefix="edit"
               trip={trip}
               initial={editing}
-              submitLabel="Save changes"
+              submitLabel={t('expense.saveChanges')}
               onSubmit={(draft) => {
                 dispatch({ type: 'expense/update', expense: draftToExpense(draft, trip, editing) })
                 setEditing(null)
@@ -149,7 +171,7 @@ export default function App({ initialState, today = getTodayIso() }: Props) {
           role="status"
           className="bg-primary text-primary-foreground fixed inset-x-4 bottom-4 z-40 mx-auto flex max-w-md items-center justify-between gap-3 rounded-lg px-4 py-3 text-sm shadow-lg"
         >
-          <span>Deleted {formatMoney(lastDeleted.amountBase, trip.baseCurrency)}</span>
+          <span>{t('expense.deleted', { amount: money(lastDeleted.amountBase, trip.baseCurrency) })}</span>
           <Button
             size="sm"
             variant="secondary"
@@ -158,7 +180,7 @@ export default function App({ initialState, today = getTodayIso() }: Props) {
               setLastDeleted(null)
             }}
           >
-            Undo
+            {t('expense.undo')}
           </Button>
         </div>
       )}

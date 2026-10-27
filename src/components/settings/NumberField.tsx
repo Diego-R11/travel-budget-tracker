@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Input } from '@/components/ui/input'
 
 interface Props extends Omit<React.ComponentProps<'input'>, 'value' | 'onChange'> {
@@ -14,10 +14,13 @@ interface Props extends Omit<React.ComponentProps<'input'>, 'value' | 'onChange'
  */
 export function NumberField({ value, onCommit, allowZero = false, ...props }: Props) {
   const [text, setText] = useState(String(value))
+  const [prevValue, setPrevValue] = useState(value)
 
-  useEffect(() => {
-    setText((current) => (Number(current) === value ? current : String(value)))
-  }, [value])
+  // The value changed from outside (e.g. live rates arrived): show it, unless it's what the user typed.
+  if (value !== prevValue) {
+    setPrevValue(value)
+    if (Number(text) !== value) setText(String(value))
+  }
 
   const isValid = (n: number) => Number.isFinite(n) && (allowZero ? n >= 0 : n > 0)
 

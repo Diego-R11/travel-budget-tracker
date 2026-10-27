@@ -10,6 +10,7 @@ export const testTrip: Trip = {
     { code: 'COP', unitsPerBase: 4000 },
   ],
   emergencyCushion: 100,
+  autoUpdateRates: false,
   days: [
     { id: 'd1', date: '2026-01-01', place: 'City A', country: 'Country A', budget: 50 },
     { id: 'd2', date: '2026-01-02', place: 'City B', country: 'Country A', budget: 50 },

@@ -31,5 +31,6 @@ export const sampleTrip: Trip = {
     { code: 'COP', unitsPerBase: 3650 },
   ],
   emergencyCushion: 135,
+  autoUpdateRates: true,
   days: plan.map(([date, place, country, budget]) => ({ id: `day-${date}`, date, place, country, budget })),
 }

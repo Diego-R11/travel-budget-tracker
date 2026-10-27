@@ -45,7 +45,8 @@ export function migrateV1(v1: V1Expense[]): Expense[] {
 
 export function loadState(): AppState {
   const saved = read<AppState>(STORAGE_KEY)
-  if (saved?.trip?.days?.length) return saved
+  // Fields added after the first v2 release get their defaults.
+  if (saved?.trip?.days?.length) return { ...saved, trip: { ...saved.trip, autoUpdateRates: saved.trip.autoUpdateRates ?? true } }
   const v1 = read<V1Expense[]>(V1_EXPENSES)
   return { trip: sampleTrip, expenses: v1 ? migrateV1(v1) : [] }
 }

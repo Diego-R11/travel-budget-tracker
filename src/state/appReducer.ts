@@ -1,5 +1,5 @@
 import * as settings from '../domain/tripSettings'
-import type { Expense, PlanDay, Trip } from '../domain/types'
+import type { Expense, LiveRates, PlanDay, Trip } from '../domain/types'
 
 export interface AppState {
   trip: Trip
@@ -16,7 +16,7 @@ export type AppAction =
   | { type: 'expense/update'; expense: Expense }
   | { type: 'expense/remove'; id: string }
   | { type: 'trip/update'; changes: Parameters<typeof settings.updateTrip>[1] }
-  | { type: 'day/add'; id: string; fallbackDate: string }
+  | { type: 'day/add'; id: string; fallbackDate: string; labels?: { place: string; country: string } }
   | { type: 'day/update'; id: string; changes: Partial<Omit<PlanDay, 'id'>> }
   | { type: 'day/remove'; id: string }
   | { type: 'day/setAllBudgets'; budget: number }
@@ -24,6 +24,7 @@ export type AppAction =
   | { type: 'currency/updateRate'; code: string; unitsPerBase: number }
   | { type: 'currency/remove'; code: string }
   | { type: 'currency/changeBase'; code: string }
+  | { type: 'currency/applyLive'; rates: LiveRates }
 
 export function appReducer(state: AppState, action: AppAction): AppState {
   const { trip, expenses } = state
@@ -37,7 +38,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case 'trip/update':
       return { ...state, trip: settings.updateTrip(trip, action.changes) }
     case 'day/add':
-      return { ...state, trip: settings.addDay(trip, action.id, action.fallbackDate) }
+      return { ...state, trip: settings.addDay(trip, action.id, action.fallbackDate, action.labels) }
     case 'day/update':
       return { ...state, trip: settings.updateDay(trip, action.id, action.changes) }
     case 'day/remove': {
@@ -55,5 +56,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, trip: settings.removeCurrency(trip, action.code) }
     case 'currency/changeBase':
       return settings.changeBaseCurrency(trip, expenses, action.code)
+    case 'currency/applyLive':
+      return { ...state, trip: settings.applyLiveRates(trip, action.rates).trip }
   }
 }

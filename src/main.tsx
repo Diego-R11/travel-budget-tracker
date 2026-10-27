@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
+import { Providers } from './Providers'
 import './index.css'
 
 // Follow the system light/dark preference (shadcn uses the .dark class).
@@ -11,6 +12,8 @@ dark.addEventListener('change', applyTheme)
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <Providers>
+      <App />
+    </Providers>
   </StrictMode>,
 )

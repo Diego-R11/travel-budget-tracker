@@ -1,9 +1,12 @@
 import { round2 } from './budget'
-import type { Currency, Expense, PlanDay, Trip } from './types'
+import type { Currency, Expense, LiveRates, PlanDay, Trip } from './types'
 
 /** Pure operations to edit the trip configuration. Each returns a new Trip. */
 
-export function updateTrip(trip: Trip, changes: Partial<Pick<Trip, 'name' | 'emergencyCushion' | 'homeCurrency'>>): Trip {
+export function updateTrip(
+  trip: Trip,
+  changes: Partial<Pick<Trip, 'name' | 'emergencyCushion' | 'homeCurrency' | 'autoUpdateRates'>>,
+): Trip {
   return { ...trip, ...changes }
 }
 
@@ -14,11 +17,11 @@ function addDaysIso(iso: string, n: number): string {
 }
 
 /** Adds a day right after the last one, copying its place, country and budget. */
-export function addDay(trip: Trip, id: string, fallbackDate: string): Trip {
+export function addDay(trip: Trip, id: string, fallbackDate: string, labels = { place: 'New place', country: 'Country' }): Trip {
   const last = [...trip.days].sort((a, b) => a.date.localeCompare(b.date)).at(-1)
   const day: PlanDay = last
     ? { ...last, id, date: addDaysIso(last.date, 1) }
-    : { id, date: fallbackDate, place: 'New place', country: 'Country', budget: 50 }
+    : { id, date: fallbackDate, place: labels.place, country: labels.country, budget: 50 }
   return { ...trip, days: [...trip.days, day] }
 }
 
@@ -106,4 +109,33 @@ export function changeBaseCurrency(trip: Trip, expenses: Expense[], newBase: str
     },
     expenses: expenses.map((e) => ({ ...e, amountBase: round2(e.amountBase * factor) })),
   }
+}
+
+export interface ApplyRatesResult {
+  trip: Trip
+  updated: string[]
+  /** Configured currencies the provider doesn't cover: they keep the rate entered by hand. */
+  missing: string[]
+}
+
+/**
+ * Applies live rates to every configured currency the provider knows about.
+ * Rates for another base (e.g. a response that arrived after the base changed) are ignored.
+ */
+export function applyLiveRates(trip: Trip, live: LiveRates): ApplyRatesResult {
+  if (live.base !== trip.baseCurrency) return { trip, updated: [], missing: [] }
+  const updated: string[] = []
+  const missing: string[] = []
+  const currencies = trip.currencies.map((c) => {
+    if (c.code === trip.baseCurrency) return c
+    const rate = live.rates[c.code]
+    if (!(rate > 0)) {
+      missing.push(c.code)
+      return c
+    }
+    updated.push(c.code)
+    // 6 significant digits is plenty for a travel budget and keeps the inputs readable.
+    return { ...c, unitsPerBase: Number(rate.toPrecision(6)) }
+  })
+  return { trip: { ...trip, currencies, ratesUpdatedAt: live.updatedAt }, updated, missing }
 }

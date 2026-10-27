@@ -8,7 +8,7 @@ interface Props {
   onOpenChange: (open: boolean) => void
   onEdit: () => void
   onDelete: () => void
-  label: string
+  labels: { edit: string; delete: string; editAction: string; deleteAction: string }
   children: ReactNode
 }
 
@@ -16,7 +16,7 @@ interface Props {
  * iOS-style row: swipe left to reveal Edit and Delete. Vertical scrolling still works
  * (touch-action: pan-y). Keyboard users can tab to the actions, which opens the row.
  */
-export function SwipeableRow({ open, onOpenChange, onEdit, onDelete, label, children }: Props) {
+export function SwipeableRow({ open, onOpenChange, onEdit, onDelete, labels, children }: Props) {
   const start = useRef<{ x: number; offset: number } | null>(null)
   const [dragOffset, setDragOffset] = useState<number | null>(null)
   const offset = dragOffset ?? (open ? -ACTIONS_WIDTH : 0)
@@ -52,20 +52,20 @@ export function SwipeableRow({ open, onOpenChange, onEdit, onDelete, label, chil
           className="bg-secondary text-secondary-foreground flex flex-1 flex-col items-center justify-center gap-0.5 text-xs font-medium"
           onFocus={() => onOpenChange(true)}
           onClick={onEdit}
-          aria-label={`Edit ${label}`}
+          aria-label={labels.edit}
         >
           <Pencil className="size-4" />
-          Edit
+          {labels.editAction}
         </button>
         <button
           type="button"
           className="bg-destructive flex flex-1 flex-col items-center justify-center gap-0.5 text-xs font-medium text-white"
           onFocus={() => onOpenChange(true)}
           onClick={onDelete}
-          aria-label={`Delete ${label}`}
+          aria-label={labels.delete}
         >
           <Trash2 className="size-4" />
-          Delete
+          {labels.deleteAction}
         </button>
       </div>
       <div

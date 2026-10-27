@@ -28,6 +28,10 @@ export interface Trip {
   currencies: Currency[]
   emergencyCushion: number
   days: PlanDay[]
+  /** Fetch live exchange rates when the app opens. */
+  autoUpdateRates: boolean
+  /** When the rates were last taken from the API (ms). Undefined = entered by hand. */
+  ratesUpdatedAt?: number
 }
 
 export interface Expense {
@@ -39,4 +43,12 @@ export interface Expense {
   category: Category
   note: string
   createdAt: number
+}
+
+/** Exchange rates from an online provider, in "units per 1 base" like Currency. */
+export interface LiveRates {
+  base: string
+  rates: Record<string, number>
+  /** When the provider last refreshed the rates (ms). */
+  updatedAt: number
 }

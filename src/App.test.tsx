@@ -1,15 +1,13 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { fireEvent, screen, within } from '@testing-library/react'
+import type userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
-import App from './App'
 import { resolveSwipe } from './domain/swipe'
-import { makeExpense, testTrip } from './test/fixtures'
+import { makeExpense } from './test/fixtures'
+import { renderApp } from './test/render'
 import type { Expense } from './domain/types'
 
 function setup(expenses: Expense[] = []) {
-  const user = userEvent.setup()
-  render(<App initialState={{ trip: testTrip, expenses }} today="2026-01-01" />)
-  return { user }
+  return renderApp({ expenses })
 }
 
 async function addExpense(user: ReturnType<typeof userEvent.setup>, amount: string, note = '') {
