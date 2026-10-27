@@ -1,5 +1,7 @@
 # Travel Budget Tracker
 
+**Live demo:** https://travel-budget-tracker-seven.vercel.app
+
 A mobile-first React app to control daily spending during a multi-country trip. Each day has its own budget; whatever you don't spend rolls over to the next day, and overspending is taken from the days that follow. Unexpected costs go to a separate emergency cushion so they don't distort the daily plan.
 
 I built it to track my own trip through Spain, France, Switzerland and Italy, paying in EUR, CHF and COP.
